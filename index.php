@@ -1,6 +1,7 @@
 <?php
 require dirname(__FILE__) . DIRECTORY_SEPARATOR . 'autoload.php';
 
-global $DB;
-$data = $DB->get_all("SELECT `id` FROM `taiyue`.`ty_info`");
-print_r($data);
+global $db;
+$data = $db->all("SELECT `user_name` FROM `[users]` WHERE user_id>740 LIMIT 3");
+
+debug($data);

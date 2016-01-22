@@ -11,34 +11,72 @@ class DB extends mysqli
 	 * @var string
 	 */
 	public $sql;
-	protected $mysqli;												//mysqli实例对象
-	protected $rs;														//结果集
-	protected $query_num	= 0;								//执行次数
-	protected $fetch_mode	= MYSQLI_ASSOC;		//获取模式
-	protected $cache;												//缓存类对象
-	protected $reload     = false;								//是否重新载入
-	protected $cache_mark = true;							//缓存标记
-
+	
+	/**
+	 * 表前缀。
+	 * @var string
+	 */
+	public $prefix;
+	
+	/**
+	 * mysqli实例对象。
+	 * @var object
+	 */
+	protected $mysqli;
+	
+	/**
+	 * 结果集。
+	 * @var resource
+	 */
+	protected $rs;
+	
+	/**
+	 * 执行次数。
+	 * @var integer
+	 */
+	protected $query_num	= 0;
+	
+	/**
+	 * 缓存类对象。
+	 * @var object
+	 */
+	protected $cache;
+	
+	/**
+	 * 重载。
+	 * @var bool
+	 */
+	protected $reload     = false;
+	
+	/**
+	 * 缓存标记。
+	 * @var bool
+	 */
+	protected $cache_mark = true;
+	protected $fetch_mode	= MYSQLI_ASSOC;
+	
 	/**
 	 * db.mysqli。
 	 * @param string $dbhost
 	 * @param string $dbuser
 	 * @param string $dbpass
 	 * @param string $dbname
+	 * @param string $prefix
 	 * @param int $dbport
-	 * @return object 返回一个mysqli对象
+	 * @return void
 	 */
-	public function  __construct($dbhost, $dbuser, $dbpass, $dbname, $dbport = 3306)
+	public function  __construct($dbhost, $dbuser, $dbpass, $dbname, $prefix, $dbport = 3306)
 	{
-		$this->mysqli = new mysqli($dbhost, $dbuser, $dbpass, $dbname, $dbport);
+		$this->prefix = $prefix;
+		@parent::__construct($dbhost, $dbuser, $dbpass, $dbname, $dbport);
+		
 		if($this->connect_errno)
 		{
-			$this->mysqli = false;
 			die('<h2>'. $this->connect_error .'</h2>');
 		}
 		else
 		{
-			$this->set_charset("utf8");
+			parent::set_charset("utf8");
 		}
 	}
 
@@ -87,8 +125,9 @@ class DB extends mysqli
 	 * @param string $limit
 	 * @return string
 	 */
-	protected static function get_query_sql($sql, $limit = null)
+	protected function get_query_sql($sql, $limit = null)
 	{
+		$sql = $this->sql($sql);
 		if (@preg_match("/[0-9]+(,[ ]?[0-9]+)?/is", $limit) && !preg_match("/ LIMIT [0-9]+(,[ ]?[0-9]+)?$/is", $sql))
 		{
 			$sql .= " LIMIT " . $limit;
@@ -126,18 +165,22 @@ class DB extends mysqli
 	{
 		return $this->query_num;
 	}
-
-	//执行sql语句查询
+	
+	/**
+	 * 执行sql语句查询。
+	 * @param string $sql
+	 * @param $string $limit 
+	 * @return resource
+	 */
 	public function query($sql, $limit = null)
 	{
 		$sql = $this->get_query_sql($sql, $limit);
 		$this->sql[] = $sql;
-		$this->rs = $this->mysqli->query($sql);
+		$this->rs = parent::query($sql);
 		if (!$this->rs)
 		{
-			echo "<p>error: ".$this->mysqli->error."</p>";
-			echo "<p>sql: ".$sql."</p>";
-			die();
+			echo "<p>error: ". $this->error ."</p>"; 
+			die("<p>sql: ".$sql."</p>");
 		}
 		else
 		{
@@ -145,9 +188,13 @@ class DB extends mysqli
 			return $this->rs;
 		}
 	}
-
-	//返回单条记录的单个字段值
-	public function get_one($sql)
+	
+	/**
+	 * 获取单条记录的单个字段值。
+	 * @param string $sql
+	 * @return string
+	 */
+	public function one($sql)
 	{
 		$this->query($sql, 1);
 		$this->fetch_mode = MYSQLI_NUM;
@@ -156,63 +203,100 @@ class DB extends mysqli
 		return $row[0];
 	}
 
-	//缓存单个字段
-	public function cache_one($sql, $reload = false) {
+	/**
+	 * 缓存单个字段。
+	 * @param string $sql
+	 * @param bool $reload
+	 * @return string
+	 */
+	public function cache_one($sql, $reload = false)
+	{
 		$this->reload	= $reload;
 		$sql    = $this->get_query_sql($sql, 1);
-		return $this->get_cache($sql, 'get_one');
+		return $this->get_cache($sql, 'one');
 	}
-
-	//获取单条记录
-	public function get_row($sql, $fetch_mode = MYSQLI_ASSOC) {
+	
+	/**
+	 * 获取行记录。
+	 * @param string $sql
+	 * @param string $fetch_mode
+	 * @return array
+	 */
+	public function row($sql, $fetch_mode = MYSQLI_ASSOC)
+	{
 		$this->query($sql, 1);
 		$this->fetch_mode    = $fetch_mode;
 		$row = $this->fetch();
 		$this->free();
 		return $row;
 	}
-
-	//缓存行
-	public function cache_row($sql, $reload = false) {
+	
+	/**
+	 * 缓存行。
+	 * @param string $sql
+	 * @param bool $reload
+	 * @return array
+	 */
+	public function cache_row($sql, $reload = false)
+	{
 		$this->reload	= $reload;
 		$sql    = $this->get_query_sql($sql, 1);
-		return $this->get_cache($sql, 'get_row');
+		return $this->get_cache($sql, 'row');
 	}
-
-	//返回所有的结果集
-	public function get_all($sql, $limit = null, $fetch_mode = MYSQLI_ASSOC)
+	
+	/**
+	 * 返回所有的结果集。
+	 * @param string $sql
+	 * @param mixed $limit
+	 * @param string $fetch_mode
+	 * @return array
+	 */
+	public function all($sql, $limit = null, $fetch_mode = MYSQLI_ASSOC)
 	{
+		$rows = array();
 		$this->query($sql, $limit);
-		$all_rows = array();
-		$this->fetch_mode    = $fetch_mode;
-		while(false !== $rows = $this->fetch())
+		$this->fetch_mode = $fetch_mode;
+		
+		while($row = $this->fetch())
 		{
-			$all_rows[] = $rows;
+			$rows[] = $row;
 		}
+
 		$this->free();
-		return $all_rows;
+		return $rows;
 	}
-
-	//缓存all
-	public function cache_all($sql, $reload = false, $limit = null) {
+	
+	/**
+	 * 缓存所有行。
+	 * @param string $sql
+	 * @param string $reload
+	 * @param mixed $limit
+	 * @return array
+	 */
+	public function cache_all($sql, $reload = false, $limit = null)
+	{
 		$this->reload	= $reload;
-		$sql    = $this->get_query_sql($sql, $limit);
-		return $this->get_cache($sql, 'get_all');
+		$sql = $this->get_query_sql($sql, $limit);
+		return $this->get_cache($sql, 'all');
 	}
 
-	//返回前一次mysql操作所影响的记录行数
-	public function affected_rows() {
-		return $this->mysqli->affected_rows;
+	/**
+	 * 返回前一次mysql操作所影响的记录行数。
+	 * @return int
+	 */
+	public function affected_rows()
+	{
+		return $this->affected_rows;
 	}
 	
 	 /**
-	 * 获取插入语句
-     *
-     * @param    string     $tbl_name   表名
-     * @param    array      $info       数据
+	 * 获取插入语句。
+     * @param string $tbl_name 表名
+     * @param array $info 数据
+     * @return string
      */
-    public function get_insert_db_sql($tbl_name,$info)
-	{	
+    public function get_insert_db_sql($tbl_name, $info)
+	{
 		//首先判断是否为数组，再判断数组是否为空
         if(is_array($info)&&!empty($info))
         {
@@ -225,19 +309,15 @@ class DB extends mysqli
             }
             $s_fields = "(".implode(",",$fields).")";
             $s_values  = "('".implode("','",$values)."')";
-            $sql = "INSERT INTO
-                        $tbl_name
-                        $s_fields
-                    VALUES
-                        $s_values";
-            Return $sql;
+            $sql = "INSERT INTO $tbl_name $s_fields VALUES $s_values";
+            return $sql;
         }
         else
         {
-            Return false;
+            return false;
         }
     }
-        
+
     /**
      * 获取替换语句:replace into是insert into的增强版
      * 区别：replace into跟insert功能类似，不同点在于：replace into 首先尝试插入数据到表中，如果发现表中
@@ -290,16 +370,16 @@ class DB extends mysqli
                 {
                     if($i==0&&$val!==null)
                     {
-                        $data = $key."='".$val."'";	//第一次：如，update 表名 set username='admin'
+                        $data = $key."='".$val."'";	//第一次：如，update 表名 set name='admin'
                     }
                     else
                     {
-                        $data .= ",".$key." = '".$val."'";//非第一次：如， ，password='123'
+                        $data .= ",".$key." = '".$val."'";//非第一次：如， ，p='123'
                     }
                     $i++;
                 }
             }	
-            $sql = "UPDATE ".$tbl_name." SET ".$data." WHERE ".$condition;
+            $sql = "UPDATE $tbl_name SET $data WHERE ".$condition;
             return $sql;
         }
         else
@@ -309,21 +389,88 @@ class DB extends mysqli
     }
     
     /**
-     * 取得数据库最后一个插入ID
-     *
+     * 取得数据库最后一个插入ID。
      * @return int
      */
     public function last_id()
     {
-        return mysqli_insert_id($this->mysqli);
+        return $this->insert_id;
+    }
+
+	/**
+	 * 预处理sql。
+	 * @param string $sql
+	 * @example [users] 转义成带前缀表名 prefix.users
+	 * @return string
+	 */    
+    public function sql($sql)
+    {
+    	if (isset($this->prefix) && !empty($this->prefix))
+    	{
+	    	$sql = preg_replace('/\[/', $this->prefix, $sql);
+	    	$sql = preg_replace('/\]/', '', $sql);
+    	}
+    	return self::escape_string($sql);
     }
     
-    public function real_get($sql, $fetch_mode = MYSQLI_ASSOC)
+    /**
+     * 转义字符串。
+     * @param string $var 源字串。
+     * @return string
+     */
+    public static function escape($var)
     {
-		$this->query($sql);
-		$this->fetch_mode = $fetch_mode;
-		$row = $this->fetch();
-		$this->free();
-		return $row;
-	}
+    	if ($var instanceof self)
+    	{
+    		return $var;
+    	}
+    	if (is_array($var))
+    	{
+    		foreach($var as &$s)
+    		{
+    			$s = self::escape($s);
+    		}
+    		return $var;
+    	}
+    
+    	if (!is_string($var) || strlen($var) == 0)
+    	{
+    		return $var;
+    	}
+    
+    	/* if (function_exists('mysql_real_escape_string'))
+    	 {
+    	 return mysql_real_escape_string($var);
+    	 }
+    	 else if (function_exists('mysql_escape_string'))
+    	 {
+    	 return mysql_escape_string( $var );
+    	 } */
+    
+    	/*
+    	 \v		垂直 tab 符, ASCII 11(0x0B)。// PHP but MySQL
+    	 \f		ASCII 12(0x0C)。 // PHP but MySQL
+    
+    	 \0		ASCII 0(NUL)字符。
+    	 \'		单引号(‘'’)。
+    	 \"		双引号(‘"’)。
+    
+    	 \b		回退符, ASCII 8(0x08)。
+    	 \n		换行符, ASCII 10(0x0A)。
+    	 \r		回车符, ASCII 13(0x0D)。
+    	 \t		tab字符, ASCII 9(0x09)。
+    	 \Z		ASCII 26(0x1A)。 // MySQL, (控制（Ctrl）-Z)。
+    	 该字符可以编码为‘\Z’，以允许你解决在Windows中ASCII 26代表文件结尾这一问题。
+    	 (如果你试图使用mysql db_name < file_name，ASCII 26会带来问题）。
+    	 \\		反斜线(‘\’)字符。
+    	 \%		‘%’字符。仅在 MySQL 的 LIKE 语句中使用。
+    	 \_		‘_’字符。仅在 MySQL 的 LIKE 语句中使用。
+    	 */
+    
+    	// WARNING: \ 斜线的替换要放在最前面。
+    	$s = array("\\", "\0", "'", '"', "\x08", "\n", "\r", "\t", "\x1A");
+    	$c = array("\\\\", "\\0", "\\'", '\\"', "\\b", "\\n", "\\r", "\\t", "\\Z");
+    
+    	return str_replace($s, $c, $var);
+    }
 }
